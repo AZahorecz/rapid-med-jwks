@@ -1,5 +1,17 @@
 # Direction: eCW FHIR key custody (Workstream B1)
 
+**Status (2026-07-01):** Code + terraform for step 1 (Secrets Manager custody)
+**built, not yet deployed.** `one_chart.py` now resolves the private key
+env-first (`ECW_PRIVATE_KEY_SECRET_ID` → Secrets Manager, else
+`ECW_PRIVATE_KEY_PATH` → file, else the historical default path), and the
+`rapidmed/ecw-fhir-private-key` secret container exists in terraform
+(`modules/security`, on the branch pending owner review — see
+`rapidmed-v3-coding-service/DIRECTION_EC2_MIGRATION.md` B1). Still open:
+apply the terraform, populate the secret value out-of-band (command below),
+set `ECW_PRIVATE_KEY_SECRET_ID` on the EC2, validate an eCW token mint from
+there, burn in, then delete the key from clinic machines. Rotation runbook
+(step 2 below) is still undesigned in detail.
+
 Companion to the central roadmap
 (`rapidmed-denial-orchestrator/ROADMAP_CENTRAL_2026-07.md`, same branch).
 
@@ -14,7 +26,13 @@ every clinic machine at `~/Code/jwks/SECRET_DO_NOT_COMMIT/private_key.pem`.
    (`rapidmed/ecw-fhir-private-key`); the EC2-hosted coding service reads it
    at boot via the instance role. After cutover + burn-in, the key is
    **deleted from every clinic machine** — custody shrinks to AWS + the eCW
-   developer portal.
+   developer portal. Terraform creates the empty secret container only
+   (same pattern as `rapidmed/tailscale-auth-key`); the value is populated
+   out-of-band so it never transits tfstate:
+   ```bash
+   aws secretsmanager put-secret-value --secret-id rapidmed/ecw-fhir-private-key \
+     --secret-string file:///path/to/private_key.pem
+   ```
 2. **Rotation gets a story** (none exists today): generate a new keypair,
    add the new public key to `jwks.json` **alongside** the old (a JWKS is a
    set — eCW selects by `kid`), update the registered JWKS with eCW, flip
